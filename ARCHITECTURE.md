@@ -79,14 +79,31 @@ Landing Zone (Bronze)         Processed Zone (Silver)
 
 If this pipeline needed to support 50+ legal text sources globally:
 
-### 1. Source Abstraction Layer
+### 1. Site Configuration (IMPLEMENTED)
+
+We've added `config/sites.yaml` as the foundation for multi-site support:
+
+```yaml
+# config/sites.yaml (current implementation)
+sites:
+  wrc:
+    name: "Workplace Relations Commission"
+    base_url: "https://www.workplacerelations.ie"
+    bodies: ["Labour Court", "WRC", ...]
+    transformation:
+      content_selector: "div.content"
+      remove_selectors: ["nav", "header", "footer"]
+```
+
+This configuration file allows us to:
+- Document site-specific settings (URLs, selectors, rate limits)
+- Provide a template for adding new sites
+- Keep scraping rules outside of code
+
+### 2. Source Abstraction Layer (Future)
 
 ```python
-# Current: Hardcoded for WRC
-class WrcSpider(scrapy.Spider):
-    ...
-
-# Proposed: Plugin architecture
+# Future: Plugin architecture
 class SourceSpider(ABC):
     @abstractmethod
     def get_search_url(self, params): pass
@@ -96,25 +113,6 @@ class SourceSpider(ABC):
 
 class WrcSpider(SourceSpider): ...
 class UKTribunalSpider(SourceSpider): ...
-class EUCourtSpider(SourceSpider): ...
-```
-
-### 2. Configuration-Driven Sources
-
-```yaml
-# sources.yaml
-sources:
-  - name: wrc_ireland
-    base_url: https://workplacerelations.ie
-    spider: wrc
-    rate_limit: 8
-    partition_days: 30
-    
-  - name: uk_tribunals
-    base_url: https://www.gov.uk/employment-tribunal-decisions
-    spider: uk_tribunal
-    rate_limit: 5
-    partition_days: 7
 ```
 
 ### 3. Distributed Architecture

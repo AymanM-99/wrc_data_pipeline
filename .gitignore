@@ -52,10 +52,8 @@ docker_data/
 # Dagster temp files
 .tmp_dagster_home*/
 
-# Debug files (development only)
-debug*.py
-debug*.html
-check_data.py
+# Debug/test files (development only)
+tests/
 
 # Dagster
 .dagster/

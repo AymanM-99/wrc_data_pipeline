@@ -245,5 +245,5 @@ docker logs wrc_mongodb
 ```
 
 ## License
+[Aymanox Code|©]
 
-[Add your license here]

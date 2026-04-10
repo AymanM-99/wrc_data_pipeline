@@ -1,0 +1,99 @@
+# Site Configurations for Legal Document Scraper
+# 
+# This file defines configuration for each website the pipeline can scrape.
+# Currently only WRC is implemented, but this structure allows easy addition
+# of new legal document sources in the future.
+#
+# To add a new site:
+# 1. Add configuration below following the template
+# 2. Create a spider class that uses this configuration
+# 3. Update transformer if site needs special HTML cleaning rules
+
+sites:
+  # ============================================================
+  # WORKPLACE RELATIONS COMMISSION (Ireland) - IMPLEMENTED
+  # ============================================================
+  wrc:
+    name: "Workplace Relations Commission"
+    country: "Ireland"
+    enabled: true
+    
+    # URLs
+    base_url: "https://www.workplacerelations.ie"
+    search_url: "https://www.workplacerelations.ie/en/cases/search"
+    
+    # Bodies/categories available on this site
+    bodies:
+      - "Employment Appeals Tribunal"
+      - "Equality Tribunal"
+      - "Labour Court"
+      - "Workplace Relations Commission"
+    
+    # Document identification
+    identifier_pattern: '(\w+-?\d+)\.html$'  # Regex to extract ID from URL
+    date_format: "%d/%m/%Y"  # Date format used on site
+    
+    # Scraping settings
+    scraping:
+      concurrent_requests: 8
+      download_delay: 1.0
+      pagination_type: "query_param"  # query_param, next_link, infinite_scroll
+      results_per_page: 10
+    
+    # HTML transformation rules
+    transformation:
+      # CSS selector for main content
+      content_selector: "div.content"
+      
+      # Elements to remove during cleaning
+      remove_selectors:
+        - "nav"
+        - "header"
+        - "footer"
+        - ".navigation"
+        - ".breadcrumb"
+        - ".social-banner"
+        - ".cookie"
+        - "script"
+        - "style"
+        - ".return-to-search"
+    
+    # Storage naming
+    storage:
+      bucket_prefix: ""  # Empty = use default bucket names
+      collection_prefix: ""  # Empty = use default collection names
+
+  # ============================================================
+  # TEMPLATE FOR NEW SITES
+  # ============================================================
+  # uk_employment_tribunal:
+  #   name: "UK Employment Tribunal"
+  #   country: "United Kingdom"
+  #   enabled: false
+  #   
+  #   base_url: "https://www.gov.uk/employment-tribunal-decisions"
+  #   search_url: "https://www.gov.uk/employment-tribunal-decisions"
+  #   
+  #   bodies:
+  #     - "Employment Tribunal"
+  #     - "Employment Appeal Tribunal"
+  #   
+  #   identifier_pattern: '/decisions/(\d+)'
+  #   date_format: "%Y-%m-%d"
+  #   
+  #   scraping:
+  #     concurrent_requests: 4
+  #     download_delay: 2.0
+  #     pagination_type: "next_link"
+  #     results_per_page: 20
+  #   
+  #   transformation:
+  #     content_selector: "article.decision-content"
+  #     remove_selectors:
+  #       - "nav"
+  #       - "aside"
+  #       - ".related-content"
+  #   
+  #   storage:
+  #     bucket_prefix: "uk"
+  #     collection_prefix: "uk"
