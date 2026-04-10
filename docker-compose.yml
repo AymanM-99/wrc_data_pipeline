@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # MongoDB - Document database for metadata storage
+  mongodb:
+    image: mongo:7.0
+    container_name: wrc_mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password123}
+      MONGO_INITDB_DATABASE: wrc_scraper
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - wrc_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO - S3-compatible object storage for documents
+  minio:
+    image: minio/minio:latest
+    container_name: wrc_minio
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Web Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - wrc_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Client - For creating initial buckets
+  minio-init:
+    image: minio/mc:latest
+    container_name: wrc_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
+      mc mb myminio/landing-bucket --ignore-existing;
+      mc mb myminio/processed-bucket --ignore-existing;
+      echo 'Buckets created successfully';
+      exit 0;
+      "
+    networks:
+      - wrc_network
+
+volumes:
+  mongodb_data:
+  minio_data:
+
+networks:
+  wrc_network:
+    driver: bridge
