@@ -115,54 +115,42 @@ class WrcSpider(scrapy.Spider):
     
     def start_requests(self) -> Iterator[scrapy.Request]:
         """
-        Generate initial requests for all partitions and bodies.
+        Generate initial requests for all partitions.
         
         This creates requests for:
         - Each date partition (e.g., monthly)
-        - Each body (Labour Court, WRC, etc.)
-        - Page 1 of each combination
+        - All bodies at once (no body filter - website filter is broken)
+        - Page 1 of each partition
         """
-        # Determine which bodies to scrape
-        bodies_to_scrape = (
-            [self.body_filter] if self.body_filter 
-            else list(self.BODIES.keys())
-        )
-        
         # Generate partitions
         for partition_start, partition_end in self._generate_partitions():
             partition_date = partition_start.strftime("%Y-%m")
             
-            for body_id in bodies_to_scrape:
-                body_name = self.BODIES[body_id]
-                
-                logger.info(
-                    f"Starting partition scrape",
-                    extra={
-                        'partition_date': partition_date,
-                        'body': body_name
-                    }
-                )
-                
-                # Build search URL
-                url = self._build_search_url(
-                    from_date=partition_start,
-                    to_date=partition_end,
-                    body_id=body_id,
-                    page=1
-                )
-                
-                yield scrapy.Request(
-                    url=url,
-                    callback=self.parse_search_results,
-                    meta={
-                        'partition_date': partition_date,
-                        'partition_start': partition_start,
-                        'partition_end': partition_end,
-                        'body_id': body_id,
-                        'body_name': body_name,
-                        'page': 1,
-                    }
-                )
+            logger.info(
+                f"Starting partition scrape",
+                extra={
+                    'partition_date': partition_date,
+                    'body': 'All'
+                }
+            )
+            
+            # Build search URL (no body filter - gets all bodies)
+            url = self._build_search_url(
+                from_date=partition_start,
+                to_date=partition_end,
+                page=1
+            )
+            
+            yield scrapy.Request(
+                url=url,
+                callback=self.parse_search_results,
+                meta={
+                    'partition_date': partition_date,
+                    'partition_start': partition_start,
+                    'partition_end': partition_end,
+                    'page': 1,
+                },
+            )
     
     def _generate_partitions(self) -> Iterator[tuple]:
         """
@@ -186,14 +174,17 @@ class WrcSpider(scrapy.Spider):
             current_start = partition_end + timedelta(days=1)
     
     def _build_search_url(self, from_date: datetime, to_date: datetime,
-                          body_id: int, page: int = 1) -> str:
+                          page: int = 1) -> str:
         """
         Build the search URL with all parameters.
+        
+        Note: We don't use the body filter because the website's filter
+        is broken for WRC (body=4) decisions. Searching without body
+        filter returns all decisions from all bodies.
         
         Args:
             from_date: Start date
             to_date: End date
-            body_id: Body index (1-4)
             page: Page number
         
         Returns:
@@ -206,13 +197,50 @@ class WrcSpider(scrapy.Spider):
         
         params = {
             'decisions': '1',
-            'body': str(body_id),
+            # No body filter - website filter is broken for WRC decisions
             'from': from_str,
             'to': to_str,
             'pageNumber': str(page),
         }
         
         return f"{self.BASE_SEARCH_URL}?{urlencode(params)}"
+    
+    def _detect_body_from_identifier(self, identifier: str) -> str:
+        """
+        Detect the body (tribunal/commission) from the identifier prefix.
+        
+        Identifier patterns:
+        - ADJ-*, IR-SC-* = Workplace Relations Commission
+        - LCR*, UDD*, DWT*, EDA*, PWD* = Labour Court
+        - DEC-* = Equality Tribunal  
+        - UD*, MN*, RP*, TE* = Employment Appeals Tribunal
+        
+        Args:
+            identifier: Document identifier (e.g., 'ADJ-00054658')
+        
+        Returns:
+            Body name string
+        """
+        identifier_upper = identifier.upper()
+        
+        # WRC identifiers
+        if identifier_upper.startswith('ADJ-') or identifier_upper.startswith('IR'):
+            return "Workplace Relations Commission"
+        
+        # Labour Court identifiers
+        if any(identifier_upper.startswith(prefix) for prefix in ['LCR', 'UDD', 'DWT', 'EDA', 'PWD']):
+            return "Labour Court"
+        
+        # Equality Tribunal identifiers
+        if identifier_upper.startswith('DEC-'):
+            return "Equality Tribunal"
+        
+        # Employment Appeals Tribunal identifiers
+        if any(identifier_upper.startswith(prefix) for prefix in ['UD', 'MN', 'RP', 'TE']):
+            return "Employment Appeals Tribunal"
+        
+        # Default to WRC if unknown
+        return "Workplace Relations Commission"
     
     def parse_search_results(self, response: Response) -> Iterator[Any]:
         """
@@ -227,8 +255,6 @@ class WrcSpider(scrapy.Spider):
         Also handles pagination by following next page links.
         """
         partition_date = response.meta['partition_date']
-        body_id = response.meta['body_id']
-        body_name = response.meta['body_name']
         current_page = response.meta['page']
         
         # Debug: log response info
@@ -246,7 +272,6 @@ class WrcSpider(scrapy.Spider):
                 f"Found {total_results} results",
                 extra={
                     'partition_date': partition_date,
-                    'body': body_name,
                     'records_found': total_results
                 }
             )
@@ -305,6 +330,9 @@ class WrcSpider(scrapy.Spider):
                         description = text
                         break
             
+            # Detect body from identifier prefix
+            body_name = self._detect_body_from_identifier(identifier)
+            
             # Create item
             item = WrcDocumentItem()
             item['identifier'] = identifier
@@ -348,7 +376,6 @@ class WrcSpider(scrapy.Spider):
                 f"Partition complete",
                 extra={
                     'partition_date': partition_date,
-                    'body': body_name,
                     'page': current_page
                 }
             )
